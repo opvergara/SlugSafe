@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LungSafe Chile · IRA–IPA Interactive Flyer</title>
+  <meta name="theme-color" content="#121316" />
+
+  <!-- ===== Librerías (CDN) ===== -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.2/dist/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Iconos / Manifest -->
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/icon-180.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+
+  <style>
+    :root{
+      --bg: #746BD3; --card: #FCFDFD; --line: #D4D1D1; --ink: #1b1f29;
+      --ira-alto: #CFECC0; --ira-bajo: #E7B6FF; --ira-moderado: #BFE1FF; --ira-muyalto: #F8C1B6;
+      --ipa-injusticia:#CE2D2C; --ipa-resiliencia:#0AA5A5; --ipa-bajo-desinf:#FFFFFF; --ipa-vulnerabilidad:#F2A30F;
+    }
+    *{ box-sizing:border-box; }
+    body{ margin:0; background:var(--bg); color:var(--ink); font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .wrapper{ width:min(1200px, 94%); margin:24px auto 36px; }
+    .sheet{ background:var(--card); border:1px solid var(--line); border-radius:20px; box-shadow:0 10px 28px rgba(0,0,0,.14); overflow:hidden; }
+    .header{ display:flex; align-items:center; gap:14px; background:#121316; color:#fff; padding:14px 18px; border-bottom: 1px solid #23252b; }
+    .header .logo{ width:72px; height:72px; border-radius:18px; overflow:hidden; flex:0 0 72px; background:#121316; display:flex; align-items:center; justify-content:center; }
+    .header .logo img{ width:100%; height:100%; object-fit:contain; }
+    .header .title{ display:flex; flex-direction:column; line-height:1.2; }
+    .header .title h1{ margin:0; font-size:26px; font-weight:800; letter-spacing:.2px; }
+    .header .title .sub{ opacity:.95; font-size:14px; }
+    .header .author{ margin-left:auto; text-align:right; font-size:13px; opacity:.95; }
+    .header-controls{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .header-controls input[type="url"]{ width:220px; padding:6px 8px; border-radius:8px; border:1px solid #343740; background:#1a1c21; color:#e9e9e9; }
+    .btn{ background:#1F69D9; color:#fff; border:none; padding:6px 10px; border-radius:8px; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.12); font-size:13px; }
+    .btn:hover{ filter:brightness(.96); }
+    .btn-outline{ background:transparent; border:1px solid #3b3f49; color:#dfe3ea; }
+    .body{ padding:18px; }
+    .controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:10px 0 2px; }
+    .control{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 10px; font-size:14px; }
+    .buttons{ display:flex; gap:8px; }
+    .metrics{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:14px 0 8px; }
+    .metric{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+    .metric .value{ font-size:24px; font-weight:800; }
+    .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:12px 12px 6px; box-shadow:0 2px 8px rgba(0,0,0,.05); }
+    .card h3{ margin:6px 6px 2px; font-size:18px; }
+    .plot-wrapper, .js-plotly-plot, .plotly, .user-select-none { overflow: visible !important; }
+    #map{ width:100%; height:520px; border-radius:14px; border:1px solid var(--line); }
+    .leaflet-control.custom-legend{ background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); font-size: 13px; line-height: 1.15; }
+    .legend-item{ display:flex; align-items:center; gap:8px; margin:6px 0; }
+    .legend-swatch{ width:22px; height:22px; display:inline-block; }
+    .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:10px; }
+    table{ width:100%; border-collapse:collapse; font-size:13.5px; background:#fff; }
+    th,td{ padding:7px 9px; border-bottom:1px solid #eee; }
+    th{ background:#f6f7f8; position:sticky; top:0; z-index:1; }
+    .search{ width:240px; padding:7px 9px; border-radius:8px; border:1px solid var(--line); }
+    .footer{ display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#fafafa; border-top:1px solid var(--line); font-size:13px; color:#6c757d; }
+    @media print { body{ background:#fff; } .wrapper{ width:210mm; margin:0 auto; } .sheet{ box-shadow:none; border:none; } .buttons, .controls .upload, .header-controls{ display:none !important; } }
+  </style>
+</head>
+<body>
+
+<div class="wrapper">
+  <div class="sheet">
+    <header class="header" role="banner" aria-label="LungSafe Chile">
+      <div class="logo">
+        <img id="brandLogo" src="assets/img/logo_lungsafe_dark.png" alt="LungSafe Chile logo" />
+      </div>
+      <div class="title">
+        <h1>LungSafe Chile</h1>
+        <div class="sub">IRA‑IPA · Salud &amp; Justicia Ambiental · Facultad de Geografía y Ciencias Políticas · PUC</div>
+        <div class="header-controls" aria-label="Controles de logo">
+          <input id="logoFile" type="file" accept="image/*" title="Subir logo (PNG/JPG/SVG)">
+          <input id="logoUrl" type="url" placeholder="o pega URL de logo…">
+          <button class="btn" id="btnUseUrl" title="Usar URL">Usar URL</button>
+          <button class="btn btn-outline" id="btnResetLogo" title="Restaurar logo">Restaurar</button>
+        </div>
+      </div>
+      <div class="author">
+        <div><b>Autor:</b> Omar Patricio Vergara Gonzalez</div>
+        <div>Pontificia Universidad Católica de Chile · 2026</div>
+      </div>
+    </header>
+
+    <div class="body">
+      <div class="controls">
+        <div class="control upload">
+          <label><b>Archivo (.xlsx o .csv):</b> <input id="fileInput" type="file" accept=".xlsx,.xls,.csv"></label>
+        </div>
+        <div class="control">
+          <label><b>Zona UTM:</b>
+            <select id="utmZone">
+              <option value="32718">18S (EPSG:32718)</option>
+              <option value="32719" selected>19S (EPSG:32719)</option>
+              <option value="32720">20S (EPSG:32720)</option>
+            </select>
+          </label>
+        </div>
+        <div class="buttons">
+          <button id="btnProcesar" class="btn">Procesar</button>
+          <button class="btn" onclick="window.print()">Imprimir / Exportar PDF</button>
+        </div>
+      </div>
+      <div id="alert" style="color:#cc0000; font-weight:600;"></div>
+
+      <h2>Resumen Ejecutivo</h2>
+      <div class="metrics">
+        <div class="metric"><div>Total Viviendas</div><div class="value" id="kpiTotal">—</div><div>Unidades Analizadas</div></div>
+        <div class="metric"><div>IRA Promedio</div><div class="value" id="kpiIraMean">—</div><div>Índice de Riesgo Asbesto</div></div>
+        <div class="metric"><div>Riesgo Muy Alto</div><div class="value" id="kpiMuyAlto">—</div><div>IRA ≥ 1.9</div></div>
+        <div class="metric"><div>Injusticia Crítica</div><div class="value" id="kpiInjusticia">—</div><div>Perfiles de Alto Riesgo</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>📊 Distribución de Categorías IRA</h3>
+          <div id="chartIRA"></div>
+        </div>
+        <div class="card">
+          <h3>📈 Distribución de Perfiles IPA</h3>
+          <div id="chartIPA"></div>
+        </div>
+      </div>
+
+      <h2 style="margin-top:14px;">🗺️ Cartografía: IRA (colores) e IPA (formas)</h2>
+      <div id="map"></div>
+      <p style="font-size:13px;color:#6c757d;margin-top:6px">Capas conmutables: “IRA (categorías)” y “IPA (perfiles)”.</p>
+
+      <h2>Tabla de viviendas</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div><input id="search" class="search" placeholder="Buscar… (ID, categoría, etc.)"></div>
+        <div><small>Filtra escribiendo texto; admite coma o punto decimal.</small></div>
+      </div>
+      <div class="table-wrap">
+        <table id="tabla">
+          <thead>
+            <tr>
+              <th>#</th><th>Este</th><th>Norte</th><th>Lat</th><th>Lon</th>
+              <th>IRA</th><th>CAPACITACION</th><th>Cat. IRA</th><th>Cat. IPA</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <div class="footer">
+      <div>🫁 <b>LungSafe Chile</b> · Análisis Dual IRA‑IPA</div>
+      <div><b>Autor:</b> Omar Patricio Vergara Gonzalez · PUC · 2026</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const IRA_COLORS = {
+  "Riesgo Alto": getCS("--ira-alto"),
+  "Riesgo Bajo": getCS("--ira-bajo"),
+  "Riesgo Moderado": getCS("--ira-moderado"),
+  "Riesgo Muy Alto": getCS("--ira-muyalto")
+};
+const IPA_STYLE = {
+  "Injusticia crítica": {shape:"triangle", fill:getCS("--ipa-injusticia"), stroke:"#7A1515"},
+  "Resiliencia exitosa": {shape:"circle",   fill:getCS("--ipa-resiliencia"), stroke:"#004a4a"},
+  "Riesgo bajo desinformado": {shape:"diamond", fill:getCS("--ipa-bajo-desinf"), stroke:"#111111"},
+  "Vulnerabilidad silenciosa": {shape:"square", fill:getCS("--ipa-vulnerabilidad"), stroke:"#8C5B00"}
+};
+function getCS(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+const alertBox = document.getElementById("alert");
+function showError(m){ alertBox.textContent = m; }
+function clearError(){ alertBox.textContent = ""; }
+function toFloat(x){ if(x===null||x===undefined) return NaN; if(typeof x==="number") return x; if(typeof x==="string"){ const t=x.trim().replace(",","."); const v=parseFloat(t); return isNaN(v)?NaN:v; } return NaN; }
+function clasificarIRA(ira){ if(ira>=1.9) return "Riesgo Muy Alto"; if(ira>=1.8) return "Riesgo Alto"; if(ira>=1.5) return "Riesgo Moderado"; return "Riesgo Bajo"; }
+function clasificarIPA(ira,cap){ if(ira>1.8 && cap===0) return "Injusticia crítica"; if(ira>=1.5 && ira<=1.8 && cap===0) return "Vulnerabilidad silenciosa"; if(ira<1.5 && cap===0) return "Riesgo bajo desinformado"; return "Resiliencia exitosa"; }
+
+// Logo runtime
+const brandLogo = document.getElementById("brandLogo");
+const logoFile  = document.getElementById("logoFile");
+const logoUrl   = document.getElementById("logoUrl");
+const btnUseUrl = document.getElementById("btnUseUrl");
+const btnReset  = document.getElementById("btnResetLogo");
+const DEFAULT_LOGO = "assets/img/logo_lungsafe_dark.png";
+(function initLogo(){ try{ const saved = localStorage.getItem("lungsafe-logo-src"); if(saved && brandLogo) brandLogo.src = saved; }catch(e){} })();
+logoFile?.addEventListener("change", (e)=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ if(brandLogo) brandLogo.src=r.result; try{ localStorage.setItem("lungsafe-logo-src", r.result); }catch(e){} }; r.readAsDataURL(f); });
+btnUseUrl?.addEventListener("click", ()=>{ const u=(logoUrl?.value||"").trim(); if(!u) return; if(brandLogo) brandLogo.src=u; try{ localStorage.setItem("lungsafe-logo-src", u); }catch(e){} });
+btnReset?.addEventListener("click", ()=>{ if(brandLogo) brandLogo.src=DEFAULT_LOGO; try{ localStorage.removeItem("lungsafe-logo-src"); }catch(e){} if(logoUrl) logoUrl.value=""; if(logoFile) logoFile.value=""; });
+
+// Plotly
+function drawPie(divId, labels, values, colors, title){
+  const data=[{ type:"pie", labels, values, hole:0.42, textposition:"inside", textinfo:"percent", texttemplate:"%{percent}", textfont:{size:14, color:"#fff", family:"Inter, system-ui, sans-serif"}, marker:{colors}, sort:false, direction:"clockwise" }];
+  const layout={ title:{text:title, x:0.5, font:{size:18, family:"Inter, system-ui, sans-serif", color:"#1b1f29"}}, showlegend:true, legend:{orientation:"h", y:-0.18, x:0.5, xanchor:"center", font:{size:12}, itemwidth:60}, margin:{t:60, r:20, b:90, l:20}, autosize:true, uniformtext:{mode:"hide", minsize:12}, automargin:true };
+  Plotly.newPlot(divId, data, layout, {displayModeBar:false, responsive:true});
+}
+
+// Leaflet
+const defs={ "32718":"+proj=utm +zone=18 +south +datum=WGS84 +units=m +no_defs +type=crs", "32719":"+proj=utm +zone=19 +south +datum=WGS84 +units=m +no_defs +type=crs", "32720":"+proj=utm +zone=20 +south +datum=WGS84 +units=m +no_defs +type=crs" };
+proj4.defs("EPSG:4326","+proj=longlat +datum=WGS84 +no_defs +type=crs");
+for(const e in defs){ proj4.defs("EPSG:"+e, defs[e]); }
+let map, layerIRA, layerIPA;
+function initMap(){ map = L.map("map"); L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {attribution:'&copy; OpenStreetMap & CARTO'}).addTo(map); map.setView([-33.45,-70.65],11); layerIRA=L.layerGroup().addTo(map); layerIPA=L.layerGroup().addTo(map); L.control.layers(null,{"IRA (categorías)":layerIRA,"IPA (perfiles)":layerIPA},{collapsed:false}).addTo(map); addLegendIRA(); addLegendIPA(); }
+function svgIcon({shape="circle", fill="#fff", stroke="#111", size=24}){ const s=size,h=s/2; let inner=""; if(shape==="circle") inner=`<circle cx="${h}" cy="${h}" r="${h-3}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`; if(shape==="square") inner=`<rect x="4" y="4" width="${s-8}" height="${s-8}" rx="3" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`; if(shape==="triangle") inner=`<polygon points="${h},4 ${s-4},${s-4} 4,${s-4}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`; if(shape==="diamond") inner=`<polygon points="${h},4 ${s-4},${h} ${h},${s-4} 4,${h}" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`; const html=`<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`; return L.divIcon({html, className:"ipa-icon", iconSize:[s,s], iconAnchor:[s/2,s/2]}); }
+function addLegendIRA(){ const c=L.control({position:'topright'}); c.onAdd=()=>{ const d=L.DomUtil.create('div','leaflet-control custom-legend'); d.innerHTML=`<div><b>CatRiesgo (IRA)</b></div><div class="legend-item"><span class="legend-swatch" style="background:${IRA_COLORS['Riesgo Alto']}; border:2px solid #333; border-radius:50%;"></span> Riesgo Alto</div><div class="legend-item"><span class="legend-swatch" style="background:${IRA_COLORS['Riesgo Bajo']}; border:2px solid #333; border-radius:50%;"></span> Riesgo Bajo</div><div class="legend-item"><span class="legend-swatch" style="background:${IRA_COLORS['Riesgo Moderado']}; border:2px solid #333; border-radius:50%;"></span> Riesgo Moderado</div><div class="legend-item"><span class="legend-swatch" style="background:${IRA_COLORS['Riesgo Muy Alto']}; border:2px solid #333; border-radius:50%;"></span> Riesgo Muy Alto</div>`; return d; }; c.addTo(map); }
+function addLegendIPA(){ const c=L.control({position:'topright'}); c.onAdd=()=>{ const d=L.DomUtil.create('div','leaflet-control custom-legend'); const tri=svgIcon({shape:'triangle',fill:getCS("--ipa-injusticia"),stroke:"#7A1515",size:20}).options.html; const cir=svgIcon({shape:'circle',fill:getCS("--ipa-resiliencia"),stroke:"#004a4a",size:20}).options.html; const dia=svgIcon({shape:'diamond',fill:getCS("--ipa-bajo-desinf"),stroke:"#111111",size:20}).options.html; const sqr=svgIcon({shape:'square',fill:getCS("--ipa-vulnerabilidad"),stroke:"#8C5B00",size:20}).options.html; d.innerHTML=`<div><b>Perfiles IPA</b></div><div class="legend-item"><span class="legend-swatch" style="background:none;">${tri}</span> Injusticia crítica</div><div class="legend-item"><span class="legend-swatch" style="background:none;">${cir}</span> Resiliencia exitosa</div><div class="legend-item"><span class="legend-swatch" style="background:none;">${dia}</span> Riesgo bajo desinformado</div><div class="legend-item"><span class="legend-swatch" style="background:none;">${sqr}</span> Vulnerabilidad silenciosa</div>`; return d; }; c.addTo(map); }
+function renderTable(rows){ const tb=document.querySelector("#tabla tbody"); tb.innerHTML=""; rows.forEach((r,i)=>{ const tr=document.createElement("tr"); tr.innerHTML=`<td>${i+1}</td><td>${isFinite(r.Este)?r.Este.toFixed(2):""}</td><td>${isFinite(r.Norte)?r.Norte.toFixed(2):""}</td><td>${isFinite(r.lat)?r.lat.toFixed(6):""}</td><td>${isFinite(r.lon)?r.lon.toFixed(6):""}</td><td>${isFinite(r.IRA)?r.IRA.toFixed(2):""}</td><td>${r.CAPACITACION}</td><td>${r.Categoria_IRA}</td><td>${r.Categoria_IPA}</td>`; tb.appendChild(tr); }); const s=document.getElementById("search"); s.oninput=()=>{ const q=s.value.trim().toLowerCase(); Array.from(tb.rows).forEach(tr=>{ tr.style.display = tr.textContent.toLowerCase().includes(q) ? "" : "none"; }); }; }
+function updateKPIs(rows){ const n=rows.length; const iraVals=rows.map(r=>r.IRA).filter(v=>isFinite(v)); const iraMean=iraVals.length?(iraVals.reduce((a,b)=>a+b,0)/iraVals.length):NaN; const muyAlto=rows.filter(r=>r.Categoria_IRA==="Riesgo Muy Alto").length; const injust=rows.filter(r=>r.Categoria_IPA==="Injusticia crítica").length; document.getElementById("kpiTotal").textContent=n; document.getElementById("kpiIraMean").textContent=isFinite(iraMean)?iraMean.toFixed(2):"—"; document.getElementById("kpiMuyAlto").textContent=muyAlto; document.getElementById("kpiInjusticia").textContent=injust; }
+function updateCharts(rows){ const catsIRA=["Riesgo Muy Alto","Riesgo Alto","Riesgo Moderado","Riesgo Bajo"]; const colorsIRA=[IRA_COLORS["Riesgo Muy Alto"],IRA_COLORS["Riesgo Alto"],IRA_COLORS["Riesgo Moderado"],IRA_COLORS["Riesgo Bajo"]]; const countsIRA=catsIRA.map(c=>rows.filter(r=>r.Categoria_IRA===c).length); drawPie("chartIRA",catsIRA,countsIRA,colorsIRA,"Distribución de Categorías IRA"); const catsIPA=["Injusticia crítica","Resiliencia exitosa","Riesgo bajo desinformado","Vulnerabilidad silenciosa"]; const colorsIPA=[getCS("--ipa-injusticia"),getCS("--ipa-resiliencia"),"#9E9E9E",getCS("--ipa-vulnerabilidad")]; const countsIPA=catsIPA.map(c=>rows.filter(r=>r.Categoria_IPA===c).length); drawPie("chartIPA",catsIPA,countsIPA,colorsIPA,"Distribución de Perfiles IPA"); }
+async function parseFile(file){ const ext=file.name.split(".").pop().toLowerCase(); if(ext==="csv"){ return new Promise((resolve,reject)=>{ Papa.parse(file,{header:true,skipEmptyLines:true,complete:r=>resolve(r.data),error:e=>reject(e)}); }); } else { const buf=await file.arrayBuffer(); const wb=XLSX.read(buf,{type:"array"}); const sheet=wb.Sheets[wb.SheetNames[0]]; return XLSX.utils.sheet_to_json(sheet,{raw:false,defval:null}); } }
+function convertUTM(rows,epsg){ const src="EPSG:"+epsg, dst="EPSG:4326"; return rows.map(r=>{ const Este=toFloat(r.Este), Norte=toFloat(r.Norte); const IRA=toFloat(r.IRA); const CAP=parseInt(toFloat(r.CAPACITACION)); let lon=NaN, lat=NaN; if(isFinite(Este)&&isFinite(Norte)){ try{ const out=proj4(src,dst,[Este,Norte]); lon=out[0]; lat=out[1]; }catch(e){} } const catIRA=isFinite(IRA)?clasificarIRA(IRA):""; const catIPA=(isFinite(IRA)&&(CAP===0||CAP===1))?clasificarIPA(IRA,CAP):""; return {...r,Este,Norte,IRA,CAPACITACION:CAP,lon,lat,Categoria_IRA:catIRA,Categoria_IPA:catIPA}; }); }
+let selectedFile=null; document.getElementById("fileInput").addEventListener("change",(e)=>{ selectedFile=e.target.files[0]||null; });
+document.getElementById("btnProcesar").addEventListener("click", async ()=>{ if(!selectedFile){ showError("Por favor, selecciona un archivo .xlsx o .csv"); return; } try{ const raw=await parseFile(selectedFile); if(!raw||!raw.length){ showError("No se encontraron filas en el archivo."); return; } clearError(); const epsg=document.getElementById("utmZone").value; const rows=convertUTM(raw,epsg); updateKPIs(rows); updateCharts(rows); renderTable(rows); initMap(); updateMap(rows); }catch(err){ console.error(err); showError("Error al procesar: "+err); } });
+function updateMap(rows){ layerIRA.clearLayers(); layerIPA.clearLayers(); const pts=rows.filter(r=>isFinite(r.lat)&&isFinite(r.lon)); if(!pts.length) return; const latlngs=[]; pts.forEach(r=>{ const col=IRA_COLORS[r.Categoria_IRA]||"#888"; const m=L.circleMarker([r.lat,r.lon],{radius:7,color:"#333",weight:2,fillColor:col,fillOpacity:0.9}).bindPopup(`<b>${r.Categoria_IRA}</b><br>IRA: ${isFinite(r.IRA)?r.IRA.toFixed(2):""}<br>Capacitación: ${r.CAPACITACION}`); m.addTo(layerIRA); latlngs.push([r.lat,r.lon]); }); pts.forEach(r=>{ const sty=IPA_STYLE[r.Categoria_IPA]; if(!sty) return; const icon=svgIcon({shape:sty.shape,fill:sty.fill,stroke:sty.stroke,size:24}); L.marker([r.lat,r.lon],{icon}).bindPopup(`<b>${r.Categoria_IPA}</b><br>IRA: ${isFinite(r.IRA)?r.IRA.toFixed(2):""}<br>Capacitación: ${r.CAPACITACION}`).addTo(layerIPA); }); const b=L.latLngBounds(latlngs); map.fitBounds(b.pad(0.2)); }
+// SW (PWA)
+if ("serviceWorker" in navigator) { window.addEventListener("load", () => { navigator.serviceWorker.register("./sw.js").catch(console.error); }); }
+</script>
+
+</body>
+</html>
